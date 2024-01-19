@@ -1,0 +1,178 @@
+executor: "KubernetesExecutor"
+
+# Default airflow tag to deploy
+defaultAirflowTag: "2.8.0"
+
+# Airflow version (Used to make some decisions based on Airflow Version being deployed)
+airflowVersion: "2.8.0"
+
+# Images
+images:
+  airflow:
+    repository: victormacedo996/airflow-dag-factory # -> Use your own image and remote repository
+    tag: 2.8.0.1
+    pullPolicy: IfNotPresent
+
+dags:
+  persistence:
+    enabled: false
+  gitSync:
+    enabled: true
+    repo: git@github.com:victormacedo996/dags.git # -> if using ssh do not use ssh:// prefix
+    sshKeySecret: airflow-git-ssh-secret
+    branch: main
+    rev: HEAD
+    depth: 0
+    # the number of consecutive failures allowed before aborting
+    maxFailures: 0
+    # subpath within the repo where dags are located
+    # should be "" if dags are at repo root
+    subPath: "dags/"
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 30m
+        memory: 64Mi
+
+workers:
+  persistence: 
+    enabled: true
+  serviceAccount:
+    # Specifies whether a ServiceAccount should be created
+    create: true
+    # The name of the ServiceAccount to use.
+    # If not set and create is true, a name is generated using the release name
+
+webserver:
+  resources:
+    requests:
+      cpu: 150m
+      memory: 1.5Gi
+    limits:
+      cpu: 500m
+      memory: 3Gi
+  serviceAccount:
+    # Specifies whether a ServiceAccount should be created
+    create: true
+    # The name of the ServiceAccount to use.
+    # If not set and create is true, a name is generated using the release name
+  livenessProbe:
+    initialDelaySeconds: 120
+
+  readinessProbe:
+    initialDelaySeconds: 120
+
+scheduler:
+  resources:
+    requests:
+      cpu: 150m
+      memory: 2Gi
+    limits:
+      cpu: 500m
+      memory: 4Gi
+  serviceAccount:
+    # Specifies whether a ServiceAccount should be created
+    create: true
+    # The name of the ServiceAccount to use.
+    # If not set and create is true, a name is generated using the release name
+
+flower:
+  # Enable flower.
+  # If True, and using CeleryExecutor/CeleryKubernetesExecutor, will deploy flower app.
+  enabled: false
+
+redis:
+  enabled: false
+
+statsd:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 50m
+      memory: 64Mi
+  # service:
+  #   extraAnnotations:
+  #     prometheus.io/path: "/metrics"
+  #     prometheus.io/port: "9102"
+  #     prometheus.io/scrape: "true"
+  extraMappings:
+    # Airflow StatsD metrics mappings (https://airflow.apache.org/docs/apache-airflow/stable/logging-monitoring/metrics.html)
+    - match: "*.executor.running_tasks"
+      match_metric_type: gauge
+      name: "af_agg_executor_running_tasks"
+
+    - match: "*.executor.queued_tasks"
+      match_metric_type: gauge
+      name: "af_agg_executor_queued_tasks"
+
+extraEnvFrom: |
+  - secretRef:
+      name: airflow-secrets
+
+triggerer:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1.5Gi
+    limits:
+      cpu: 500m
+      memory: 3Gi
+
+webserverSecretKey: webserverSecretKeySecretName
+webserverSecretKeySecretName: airflow-secrets
+
+
+###################################
+# Database - PostgreSQL Chart
+# - https://github.com/helm/charts/tree/master/stable/postgresql
+###################################
+postgresql:
+  ## if the `stable/postgresql` chart is used
+  ##
+  ## WARNING:
+  ## - this is NOT SUITABLE for production deployments of Airflow,
+  ##   you should seriously consider using an external database service,
+  ##   which can be configured with values under: `externalDatabase`
+  ##
+  ## NOTE:
+  ## - set to `false` if using an external database
+  ##
+  enabled: false
+
+###################################
+# Database - External Database
+# - these configs are only used when `postgresql.enabled` is false
+###################################
+data:
+  metadataSecretName: airflow-secrets
+
+
+###################################
+# Configure ingress as you want
+###################################
+# ingress:
+#   web:
+#     enabled: true
+#     ingressClassName: nginx
+#     hosts:
+#     - name: mysubdomain.domain.com
+
+
+
+###################################
+# Configure affinity as you want
+###################################
+# affinity:
+#   nodeAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#       - weight: 100
+#         preference:
+#           matchExpressions:
+#             - key: eks.amazonaws.com/capacityType
+#               operator: In
+#               values:
+#               - ON_DEMAND
